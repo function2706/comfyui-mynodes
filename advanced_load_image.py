@@ -58,8 +58,6 @@ class AdvancedLoadImage:
         dirpath = get_holderpath(image_filename, output_dir)
 
         meta_path = os.path.join(dirpath, "meta.json")
-        print(f'meta_path="{meta_path}"')
-        print(f'dirpath="{dirpath}"')
 
         # Default values
         metadata = {

@@ -1,4 +1,4 @@
-# comfyui_custom_nodes/extract_prompts_node.py
+from __future__ import annotations
 
 import json
 from typing import Any

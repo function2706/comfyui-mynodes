@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import os
 import re
@@ -39,6 +41,16 @@ class AdvancedSaveImage:
                     },
                 ),
             },
+            "optional": {
+                "clip_skip": ("INT", {"default": 0}),
+                "positive": ("STRING", {"default": ""}),
+                "negative": ("STRING", {"default": ""}),
+                "seed": ("INT", {"default": 0}),
+                "width": ("INT", {"default": 0}),
+                "height": ("INT", {"default": 0}),
+                "steps": ("INT", {"default": 0}),
+                "cfg": ("FLOAT", {"default": 0.0}),
+            },
             "hidden": {"prompt": "PROMPT", "extra_pnginfo": "EXTRA_PNGINFO"},
         }
 
@@ -66,14 +78,89 @@ class AdvancedSaveImage:
         result = re.sub(pattern, replace_date_format, text)
         return result
 
+    def extract_metadata(
+        self,
+        clip_skip=0,
+        positive="",
+        negative="",
+        seed=0,
+        width=0,
+        height=0,
+        steps=0,
+        cfg=0.0,
+    ):
+        metadata = {}
+
+        if clip_skip != 0:
+            metadata["clip_skip"] = clip_skip
+        if positive:
+            metadata["positive"] = positive
+        if negative:
+            metadata["negative"] = negative
+        if seed != 0:
+            metadata["seed"] = seed
+        if width != 0:
+            metadata["width"] = width
+        if height != 0:
+            metadata["height"] = height
+        if steps != 0:
+            metadata["steps"] = steps
+        if cfg != 0.0:
+            metadata["cfg"] = cfg
+
+        return metadata
+
+    def save_metadata_json(self, output_dir, image_metadata_dict):
+        """メタデータをJSONファイルに保存"""
+        meta_file = os.path.join(output_dir, "meta.json")
+
+        # 既存のメタデータがあれば読み込む
+        existing_data = {}
+        if os.path.exists(meta_file):
+            try:
+                with open(meta_file, "r", encoding="utf-8") as f:
+                    existing_data = json.load(f)
+            except Exception:
+                pass
+
+        # 新しいデータをマージ
+        existing_data.update(image_metadata_dict)
+
+        # JSONファイルに保存
+        try:
+            with open(meta_file, "w", encoding="utf-8") as f:
+                json.dump(existing_data, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"Failed to save metadata: {e}")
+
     def save_images(
         self,
         images,
+        clip_skip=0,
+        positive="",
+        negative="",
+        seed=0,
+        width=0,
+        height=0,
+        steps=0,
+        cfg=0.0,
         filename_prefix="ComfyUI",
         date_directory_format="%Y-%m-%d",
         prompt=None,
         extra_pnginfo=None,
     ):
+        # メタデータを抽出
+        metadata_dict = self.extract_metadata(
+            clip_skip=clip_skip,
+            positive=positive,
+            negative=negative,
+            seed=seed,
+            width=width,
+            height=height,
+            steps=steps,
+            cfg=cfg,
+        )
+
         # 日付ディレクトリの作成(フォーマットが指定されている場合)
         if date_directory_format.strip():
             date_str = self.process_date_format(date_directory_format)
@@ -102,6 +189,8 @@ class AdvancedSaveImage:
                 subfolder = date_str
 
         results = list()
+        image_metadata_dict = {}  # ファイル名をキーとしたメタデータ辞書
+
         for batch_number, image in enumerate(images):
             i = 255.0 * image.cpu().numpy()
             img = Image.fromarray(np.clip(i, 0, 255).astype(np.uint8))
@@ -121,7 +210,15 @@ class AdvancedSaveImage:
                 pnginfo=metadata,
                 compress_level=self.compress_level,
             )
+
+            # ファイル名をキーとしてメタデータを保存
+            image_metadata_dict[file] = metadata_dict.copy()
+            image_metadata_dict[file]["timestamp"] = datetime.now().isoformat()
+
             results.append({"filename": file, "subfolder": subfolder, "type": self.type})
             counter += 1
+
+        # メタデータをJSONファイルに保存
+        self.save_metadata_json(full_output_folder, image_metadata_dict)
 
         return {"ui": {"images": results}}

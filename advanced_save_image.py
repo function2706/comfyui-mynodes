@@ -1,11 +1,13 @@
+import json
 import os
+import re
 from datetime import datetime
+
+import folder_paths
+import numpy as np
+from comfy.cli_args import args
 from PIL import Image
 from PIL.PngImagePlugin import PngInfo
-import numpy as np
-import json
-import folder_paths
-from comfy.cli_args import args
 
 
 class AdvancedSaveImage:
@@ -24,7 +26,16 @@ class AdvancedSaveImage:
                     "STRING",
                     {
                         "default": "ComfyUI",
-                        "tooltip": "The prefix for the file to save. This may include formatting information such as %date:yyyy-MM-dd% or %Empty Latent Image.width% to include values from nodes.",
+                        "tooltip": "The prefix for the file to save.",
+                    },
+                ),
+                "date_directory_format": (
+                    "STRING",
+                    {
+                        "default": "%Y-%m-%d",
+                        "tooltip": "Date format for directory name."
+                        + " Use Python strftime format (%Y,%m,%d)."
+                        + " Leave empty to disable date directory.",
                     },
                 ),
             },
@@ -39,28 +50,56 @@ class AdvancedSaveImage:
     CATEGORY = "My Nodes"
     DESCRIPTION = "Saves the input images to your ComfyUI output directory."
 
+    def process_date_format(self, text):
+        """テキスト内の日付フォーマット(%Y-%m-%d等)を実際の日付に置換"""
+
+        def replace_date_format(match):
+            format_str = match.group(0)
+            try:
+                return datetime.now().strftime(format_str)
+            except Exception:
+                return format_str
+
+        # %で始まる日付フォーマットパターンを検出して置換
+        # strftimeで使用可能なパターンをマッチング
+        pattern = r"%[YymbBdHIMSpjaAwUWcxXzZ%+-]+"
+        result = re.sub(pattern, replace_date_format, text)
+        return result
+
     def save_images(
-        self, images, filename_prefix="ComfyUI", prompt=None, extra_pnginfo=None
+        self,
+        images,
+        filename_prefix="ComfyUI",
+        date_directory_format="%Y-%m-%d",
+        prompt=None,
+        extra_pnginfo=None,
     ):
-        # 日付ディレクトリを作成
-        date_str = datetime.now().strftime("%Y-%m-%d")
-        date_output_dir = os.path.join(self.output_dir, date_str)
+        # 日付ディレクトリの作成(フォーマットが指定されている場合)
+        if date_directory_format.strip():
+            date_str = self.process_date_format(date_directory_format)
+            output_dir = os.path.join(self.output_dir, date_str)
+            os.makedirs(output_dir, exist_ok=True)
+            use_date_dir = True
+        else:
+            output_dir = self.output_dir
+            use_date_dir = False
 
-        # ディレクトリが存在しない場合は作成
-        os.makedirs(date_output_dir, exist_ok=True)
-
+        # filename_prefixの日付フォーマットを処理
+        filename_prefix = self.process_date_format(filename_prefix)
         filename_prefix += self.prefix_append
+
         full_output_folder, filename, counter, subfolder, filename_prefix = (
             folder_paths.get_save_image_path(
-                filename_prefix, date_output_dir, images[0].shape[1], images[0].shape[0]
+                filename_prefix, output_dir, images[0].shape[1], images[0].shape[0]
             )
         )
 
-        # subfolderに日付を含める
-        if subfolder:
-            subfolder = os.path.join(date_str, subfolder)
-        else:
-            subfolder = date_str
+        # subfolderに日付ディレクトリを含める
+        if use_date_dir:
+            if subfolder:
+                subfolder = os.path.join(date_str, subfolder)
+            else:
+                subfolder = date_str
 
         results = list()
         for batch_number, image in enumerate(images):
@@ -82,9 +121,7 @@ class AdvancedSaveImage:
                 pnginfo=metadata,
                 compress_level=self.compress_level,
             )
-            results.append(
-                {"filename": file, "subfolder": subfolder, "type": self.type}
-            )
+            results.append({"filename": file, "subfolder": subfolder, "type": self.type})
             counter += 1
 
         return {"ui": {"images": results}}

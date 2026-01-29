@@ -173,6 +173,27 @@ class AdvancedSaveImage:
 
         # filename_prefixの日付フォーマットを処理
         filename_prefix = self.process_date_format(filename_prefix)
+
+        # filename_prefixからサブディレクトリとファイル名を分離
+        # Windows/Linux両対応のため、両方の区切り文字をサポート
+        filename_prefix = filename_prefix.replace("\\", "/")
+        if "/" in filename_prefix:
+            prefix_parts = filename_prefix.split("/")
+            subdirs = "/".join(prefix_parts[:-1])
+            filename_prefix = prefix_parts[-1]
+
+            # サブディレクトリを作成
+            output_dir = os.path.join(output_dir, subdirs)
+            os.makedirs(output_dir, exist_ok=True)
+
+            # subfolderパスを更新
+            if use_date_dir:
+                subfolder_prefix = os.path.join(date_str, subdirs)
+            else:
+                subfolder_prefix = subdirs
+        else:
+            subfolder_prefix = date_str if use_date_dir else ""
+
         filename_prefix += self.prefix_append
 
         full_output_folder, filename, counter, subfolder, filename_prefix = (
@@ -181,12 +202,12 @@ class AdvancedSaveImage:
             )
         )
 
-        # subfolderに日付ディレクトリを含める
-        if use_date_dir:
+        # subfolderを更新
+        if subfolder_prefix:
             if subfolder:
-                subfolder = os.path.join(date_str, subfolder)
+                subfolder = os.path.join(subfolder_prefix, subfolder)
             else:
-                subfolder = date_str
+                subfolder = subfolder_prefix
 
         results = list()
         image_metadata_dict = {}  # ファイル名をキーとしたメタデータ辞書

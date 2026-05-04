@@ -13,18 +13,6 @@ from PIL import Image, ImageOps, ImageSequence
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "comfy"))
 
-
-def get_holderpath(filename: str, base_dir: str) -> str | None:
-    """
-    output 以下を探索し, 指定ファイルを含むディレクトリ名だけ返す\n
-    見つからなければ None
-    """
-    for root, _, files in os.walk(base_dir):
-        if filename in files:
-            return root
-    return None
-
-
 class AdvancedLoadImage:
     @classmethod
     def INPUT_TYPES(s):
@@ -37,58 +25,43 @@ class AdvancedLoadImage:
 
     CATEGORY = "My Nodes"
 
-    RETURN_TYPES = ("IMAGE", "MASK", "INT", "STRING", "STRING", "INT", "INT", "INT", "INT", "FLOAT")
+    RETURN_TYPES = ("IMAGE", "MASK", "STRING", "STRING", "INT", "INT", "INT", "FLOAT")
     RETURN_NAMES = (
         "IMAGE",
         "MASK",
-        "clip_skip",
         "positive",
         "negative",
+        "clip_skip",
         "seed",
-        "width",
-        "height",
         "steps",
         "cfg",
     )
     FUNCTION = "load_image"
 
-    def load_metadata(self, image_filename):
+    def load_metadata(self, image_path):
         """Load metadata from meta.json for the given image filename"""
-        output_dir = folder_paths.get_output_directory()
-        dirpath = get_holderpath(image_filename, output_dir)
-
-        meta_path = os.path.join(dirpath, "meta.json")
-
         # Default values
         metadata = {
-            "clip_skip": 0,
             "positive": "",
             "negative": "",
+            "clip_skip": 0,
             "seed": 0,
-            "width": 0,
-            "height": 0,
             "steps": 0,
             "cfg": 0.0,
         }
-
-        if os.path.exists(meta_path):
+        if os.path.exists(image_path):
             try:
-                with open(meta_path, "r", encoding="utf-8") as f:
-                    meta_data = json.load(f)
+                img = Image.open(image_path)
+                meta = img.info
 
-                # Search for the image_path key matching the current image
-                if image_filename in meta_data:
-                    meta = meta_data[image_filename]
-                    metadata["clip_skip"] = meta.get("clip_skip", 0)
-                    metadata["positive"] = meta.get("positive", "")
-                    metadata["negative"] = meta.get("negative", "")
-                    metadata["seed"] = meta.get("seed", 0)
-                    metadata["width"] = meta.get("width", 0)
-                    metadata["height"] = meta.get("height", 0)
-                    metadata["steps"] = meta.get("steps", 0)
-                    metadata["cfg"] = meta.get("cfg", 0.0)
+                metadata["positive"] = meta.get("positive", "")
+                metadata["negative"] = meta.get("negative", "")
+                metadata["clip_skip"] = meta.get("clip_skip", 0)
+                metadata["seed"] = meta.get("seed", 0)
+                metadata["steps"] = meta.get("steps", 0)
+                metadata["cfg"] = meta.get("cfg", 0.0)
             except Exception as e:
-                print(f"Error loading meta.json: {e}")
+                print(f"Error loading metadata from {image_path}: {e}")
 
         return metadata
 
@@ -139,18 +112,14 @@ class AdvancedLoadImage:
             output_image = output_images[0]
             output_mask = output_masks[0]
 
-        # Load metadata
-        metadata = self.load_metadata(image)
-
+        metadata = self.load_metadata(image_path)
         return (
             output_image,
             output_mask,
-            metadata["clip_skip"],
             metadata["positive"],
             metadata["negative"],
+            metadata["clip_skip"],
             metadata["seed"],
-            metadata["width"],
-            metadata["height"],
             metadata["steps"],
             metadata["cfg"],
         )
